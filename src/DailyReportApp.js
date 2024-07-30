@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sun, Droplet, PlayCircle, PauseCircle, StopCircle, FileText, Save, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
 
 const ACTIVITY_TYPES = [
   "Risoluzioni Bug",
@@ -36,13 +37,20 @@ const DailyReportApp = () => {
     let interval;
     if (isWorking && !isPaused) {
       interval = setInterval(() => {
-        setTimer((prevTimer) => prevTimer + 1);
+        setTimer((prevTimer) => {
+          const newTimer = prevTimer + 1;
+          if (newTimer % 1800 === 0) { // Ogni 30 minuti
+            alert("È passata mezz'ora. Considera di fare una breve pausa!");
+          }
+          return newTimer;
+        });
       }, 1000);
     } else {
       clearInterval(interval);
     }
     return () => clearInterval(interval);
   }, [isWorking, isPaused]);
+
 
   useEffect(() => {
     const savedReport = localStorage.getItem('currentReport');
@@ -51,9 +59,7 @@ const DailyReportApp = () => {
     }
   }, []);
 
-  const saveReport = () => {
-    localStorage.setItem('currentReport', JSON.stringify(report));
-  };
+
 
   const loadReport = () => {
     const savedReport = localStorage.getItem('currentReport');
@@ -129,7 +135,42 @@ const DailyReportApp = () => {
 
   const generatePDF = () => {
     console.log('Generating PDF', report);
-    // Implementare la generazione del PDF qui
+    // IMPLEMENTAZIONE DELLA GENERAZIONE DEL FILE PDF
+
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.text('Daily Report', 10, 10);
+      
+      doc.setFontSize(12);
+      doc.text(`Date: ${report.date}`, 10, 20);
+      doc.text(`Employee: ${report.employee}`, 10, 30);
+      doc.text(`Work Mode: ${report.workMode}`, 10, 40);
+      doc.text(`Start Time: ${report.startTime}`, 10, 50);
+      doc.text(`End Time: ${report.endTime}`, 10, 60);
+      
+      doc.text('Completed Tasks:', 10, 70);
+      let yPos = 80;
+      report.completedTasks.forEach((task, index) => {
+        doc.text(`${index + 1}. ${task.description} - ${formatTime(task.duration)}`, 15, yPos);
+        yPos += 10;
+      });
+      
+      doc.text(`Total Work Time: ${formatTime(report.totalWorkTime)}`, 10, yPos + 10);
+      doc.text(`Total Break Time: ${formatTime(report.totalBreakTime)}`, 10, yPos + 20);
+      
+      doc.save('daily_report.pdf');
+  };
+
+  
+
+  const saveReport = () => {
+    const reportToSave = {
+      ...report,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem('savedReport', JSON.stringify(reportToSave));
+    alert('Report salvato con successo!');
   };
 
   const renderStep = () => {
@@ -296,7 +337,34 @@ const DailyReportApp = () => {
             <h2 className="text-xl font-bold">{currentTask ? currentTask.description : 'Attività completata'}</h2>
             {isWorking && !isPaused && (
               <>
-                <p className="text-lg">Tempo trascorso: {formatTime(timer)}</p>
+                <div className="text-2xl font-bold mb-4">
+                  Tempo trascorso: {formatTime(timer)}
+                </div>
+                <div className="mb-4">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                    <div 
+                      className="bg-blue-600 h-2.5 rounded-full" 
+                      style={{width: `${Math.min((timer / (currentTask.estimatedHours * 3600 + currentTask.estimatedMinutes * 60)) * 100, 100)}%`}}
+                    ></div>
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    placeholder="Aggiungi una nota rapida"
+                    className="w-full p-2 border rounded"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        setCurrentTask(prev => ({
+                          ...prev,
+                          notes: [...(prev.notes || []), e.target.value]
+                        }));
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </div>
+
                 <button onClick={pauseTask} className="w-full p-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition flex items-center justify-center">
                   <PauseCircle className="mr-2" /> Pausa
                 </button>
@@ -395,15 +463,28 @@ const DailyReportApp = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-200 text-gray-800 p-4">
-      <div className="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-lg">
-        <div className="flex items-center justify-center mb-6">
-          <img src="/logo_solarfertigation.png" alt="SolarFertigation Logo" className="w-full max-w-md" />
-        </div>
-        <h1 className="text-3xl font-bold mb-6 text-orange-500">Daily Task Tracker</h1>
-        {renderStep()}
+    <div className="notion-embedded-app bg-white text-gray-800 p-4 max-w-full overflow-x-hidden">
+      <h1 className="text-2xl font-bold mb-4 text-gray-700">Daily Task Tracker</h1>
+      {/* Contenuto dell'applicazione */}
+      {renderStep()}
+      {/* Barra di stato o controlli sempre visibili */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-100 p-2 flex justify-between items-center">
+        <span>Stato: {isWorking ? 'Lavorando' : 'In pausa'}</span>
+        <button onClick={saveReport} className="bg-blue-500 text-white px-2 py-1 rounded text-sm">
+          Salva
+        </button>
       </div>
     </div>
+
+    // <div className="min-h-screen bg-gray-200 text-gray-800 p-4">
+    //   <div className="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+    //     <div className="flex items-center justify-center mb-6">
+    //       <img src="/logo_solarfertigation.png" alt="SolarFertigation Logo" className="w-full max-w-md" />
+    //     </div>
+    //     <h1 className="text-3xl font-bold mb-6 text-orange-500">Daily Task Tracker</h1>
+    //     {renderStep()}
+    //   </div>
+    // </div>
   );
 };
 
